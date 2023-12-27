@@ -105,6 +105,7 @@ namespace EarthdataDownload
 
         public static void Download(string url, string outputFolder = ".")
         {
+            if (!Directory.Exists(outputFolder)) { Directory.CreateDirectory(outputFolder); }
             string outputFile = Path.GetFileName(url);
             string outputPath = Path.Combine(outputFolder, outputFile);
             // curl --insecure --proxy http://192.168.3.134:8888 -f -b "cookies.pwIASwSVAV" -c "cookies.pwIASwSVAV" -L --netrc-file ".netrc" -g -o "ascat_20221231_224800_metopc_21537_eps_o_250_3301_ovw.l2.nc" -- "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/ASCATC-L2-25km/ascat_20221231_224800_metopc_21537_eps_o_250_3301_ovw.l2.nc"
