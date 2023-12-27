@@ -1,29 +1,66 @@
 ﻿using System.Globalization;
 using System;
 using System.Net.Http.Headers;
-using Newtonsoft.Json;
 using X.Common.Helper;
+using System.CommandLine.Invocation;
+using System.CommandLine;
+using System.CommandLine.NamingConventionBinder;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 
 namespace EarthdataDownload
 {
     internal class Program
     {
-        static async Task Main(string[] args)
+        static async Task<int> Main(string[] args)
         {
-            var urls = await Search(DateTime.Now.AddDays(-1), DateTime.Now, DataType.海面风场);
+            if (args.Length == 0)
+            {
+                args = ["--help"];
+            }
+            var rootCommand = new RootCommand
+            {
+                new Option<string>([ "--datatype", "-t" ], "Data type."),
+                new Option<string>([ "--output", "-o" ], "Output folder."),
+                new Option<DateTime>([ "--start", "-s" ], "Start time."),
+                new Option<DateTime>([ "--end", "-e" ], "End time.")
+            };
+            rootCommand.Description = "Earthdata download\n\n" +
+                                    "Examples:\n" +
+                                    "  EarthdataDownload -t 海流 -o output -s 2022-12-31T00:00:02.000Z -e 2022-12-31T20:00:02.000Z \n" +
+                                    "  EarthdataDownload -t 海面风场 -o output -s 2022-12-31T00:00:02.000Z -e 2022-12-31T20:00:02.000Z \n" +
+                                    "";
+            rootCommand.Handler = CommandHandler.Create<string, string, DateTime, DateTime>(HandleParameters);
+
+            return await rootCommand.InvokeAsync(args);
+            //return rootCommand.Invoke(args);
+        }
+
+        static async Task HandleParameters(string datatype, string output, DateTime start, DateTime end)
+        {
+            // 解析枚举类型
+            if (!Enum.TryParse(datatype, out DataType dataTypeEnum))
+            {
+                Console.WriteLine($"Invalid data type: {datatype}");
+                return;
+            }
+
+            var urls = await Search(start, end, dataTypeEnum);
             foreach (var url in urls)
             {
-                Download(url);
+                Download(url, output);
                 Console.WriteLine(url);
             }
             Console.WriteLine("Hello, World!");
         }
+
         public enum DataType
         {
             海流,
             海面风场
         }
 
+        [RequiresUnreferencedCode("Calls DynamicBehavior.")]
         public static async Task<List<string>> Search(DateTime startDate, DateTime endDate, DataType dataType)
         {
             Dictionary<DataType, string> dataDict = new()
@@ -58,7 +95,10 @@ namespace EarthdataDownload
             using HttpResponseMessage response = await client.SendAsync(request);
             response.EnsureSuccessStatusCode();
             string responseBody = await response.Content.ReadAsStringAsync();
-            FeedRoot feed = JsonConvert.DeserializeObject<FeedRoot>(responseBody);
+
+            //FeedRoot feed = JsonConvert.DeserializeObject<FeedRoot>(responseBody);
+            FeedRoot feed = JsonSerializer.Deserialize(responseBody, SourceGenerationContext.Default.FeedRoot);
+            // new JsonSerializerOptions() { PropertyNameCaseInsensitive = true},
             List<string> urls = feed.Feed.Entry.Select(x => x.Links.Single(l => l.Href.StartsWith("https://") && l.Href.EndsWith(".nc")).Href).ToList();
             return urls;
         }
