@@ -10,10 +10,10 @@ namespace EarthdataDownload
     {
         static async Task Main(string[] args)
         {
-            var urls = await Search(DateTime.Now.AddDays(-10), DateTime.Now, DataType.海面风场);
+            var urls = await Search(DateTime.Now.AddDays(-1), DateTime.Now, DataType.海面风场);
             foreach (var url in urls)
             {
-                Download(urls[0]);
+                Download(url);
                 Console.WriteLine(url);
             }
             Console.WriteLine("Hello, World!");
@@ -22,8 +22,8 @@ namespace EarthdataDownload
         {
             海流,
             海面风场
-
         }
+
         public static async Task<List<string>> Search(DateTime startDate, DateTime endDate, DataType dataType)
         {
             Dictionary<DataType, string> dataDict = new()
@@ -33,9 +33,9 @@ namespace EarthdataDownload
             };
             string start = startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture); // 2022-12-31T20:00:02.000Z
             string end = endDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
-            HttpClient client = new();
+            using HttpClient client = new();
 
-            HttpRequestMessage request = new(HttpMethod.Post, "https://cmr.earthdata.nasa.gov/search/granules.json");
+            using HttpRequestMessage request = new(HttpMethod.Post, "https://cmr.earthdata.nasa.gov/search/granules.json");
 
             request.Headers.Add("authority", "cmr.earthdata.nasa.gov");
             request.Headers.Add("accept", "application/json, text/plain, */*");
@@ -52,22 +52,23 @@ namespace EarthdataDownload
             request.Headers.Add("sec-fetch-site", "same-site");
             request.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0");
 
-            request.Content = new StringContent($"echo_collection_id={dataDict[dataType]}-POCLOUD&page_num=1&page_size=200&temporal={start},{end}&sort_key=-start_date");
+            request.Content = new StringContent($"echo_collection_id={dataDict[dataType]}-POCLOUD&page_num=1&page_size=900&temporal={start},{end}&sort_key=-start_date");
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/x-www-form-urlencoded");
 
-            HttpResponseMessage response = await client.SendAsync(request);
+            using HttpResponseMessage response = await client.SendAsync(request);
             response.EnsureSuccessStatusCode();
             string responseBody = await response.Content.ReadAsStringAsync();
             FeedRoot feed = JsonConvert.DeserializeObject<FeedRoot>(responseBody);
-            List<string> urls = feed.Feed.Entry.Select(x => x.Links[0].Href).ToList();
+            List<string> urls = feed.Feed.Entry.Select(x => x.Links.Single(l => l.Href.StartsWith("https://") && l.Href.EndsWith(".nc")).Href).ToList();
             return urls;
         }
 
-        public static void Download(string url)
+        public static void Download(string url, string outputFolder = ".")
         {
             string outputFile = Path.GetFileName(url);
+            string outputPath = Path.Combine(outputFolder, outputFile);
             // curl --insecure --proxy http://192.168.3.134:8888 -f -b "cookies.pwIASwSVAV" -c "cookies.pwIASwSVAV" -L --netrc-file ".netrc" -g -o "ascat_20221231_224800_metopc_21537_eps_o_250_3301_ovw.l2.nc" -- "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/ASCATC-L2-25km/ascat_20221231_224800_metopc_21537_eps_o_250_3301_ovw.l2.nc"
-            CommandHelper.Execute("curl", $"--insecure -f -b \"cookies.pwIASwSVAV\" -c \"cookies.pwIASwSVAV\" -L --netrc-file \".netrc\" -g -o \"{outputFile}\" -- \"{url}\"");
+            CommandHelper.Execute("curl", $"--insecure -f -b \"cookies.pwIASwSVAV\" -c \"cookies.pwIASwSVAV\" -L --netrc-file \".netrc\" -g -o \"{outputPath}\" -- \"{url}\"");
         }
     }
 }
